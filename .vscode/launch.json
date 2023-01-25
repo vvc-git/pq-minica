@@ -12,7 +12,7 @@
             "cwd": "${workspaceRoot}",
             "program": "${workspaceRoot}/main.go",
             "dlvFlags": ["--check-go-version=false"],
-            "args": ["-ca-cert", "sphincs.pebble.minica.pem","-ca-key", "sphincs.pebble.minica.key", "-ip-addresses", "10.180.0.2", "-ca-sig", "sphincs+-SHAKE256-256s-simple", "-pebble-sig", "Falcon-512"]
+            "args": ["-ca-cert", "sphincs1.pebble.minica.pem","-ca-key", "sphincs1.pebble.minica.key", "-ip-addresses", "10.180.0.2", "-ca-sig", "sphincs+-SHAKE256-256s-simple", "-pebble-sig", "Falcon-512"]
         }
     ]
 }
