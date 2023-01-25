@@ -122,7 +122,7 @@ func makeIssuer(keyFile, certFile, signatureScheme string) error {
 		if err != nil {
 			return err
 		}
-	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-SHAKE256-256s-simple"{
+	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-shake256-128s-simple"{
 		_, err = makePQCRootCert(pqc, certFile)
 		if err != nil {
 			return err
@@ -156,7 +156,7 @@ func makeKey(filename, signatureScheme string) (*rsa.PrivateKey, *liboqs_sig.Pri
 		}
 		return key, nil, nil
 	
-	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-SHAKE256-256s-simple" {
+	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-shake256-128s-simple" {
 		ID := liboqs_sig.NameToSigID(signatureScheme)
 		_, key,  err := liboqs_sig.GenerateKey(ID)
 		byteKey, err := x509.MarshalPKCS8PrivateKey(key)
