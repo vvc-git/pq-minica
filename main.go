@@ -165,7 +165,7 @@ func makeKey(filename, signatureScheme string) (*rsa.PrivateKey, *liboqs_sig.Pri
 			Bytes: byteKey,
 		}
 		
-		file, err := os.OpenFile("minica-pebble/"+filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -256,7 +256,7 @@ func makePQCRootCert(key *liboqs_sig.PrivateKey, filename string) (*x509.Certifi
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile("minica-pebble/"+filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, err
 	}
