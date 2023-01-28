@@ -1,1 +1,3 @@
-go run main.go -ca-cert minica.pebble.pem -ca-key minica.pebble.key -ip-addresses 10.180.0.2 -ca-sig Falcon-512 -pebble-sig Dilithium2
+go run main.go -ca-cert ecdsa-p256.minica.pebble.pem -ca-key ecdsa-p256.minica.pebble.key -ip-addresses 10.180.0.2 -ca-sig ECDSA-P256 -pebble-sig ECDSA-P256 
+go run main.go -ca-cert p256_falcon-512.minica.pebble.pem -ca-key p256-falcon-512.minica.pebble.key -ip-addresses 10.180.0.2 -ca-sig P256_Falcon-512 -pebble-sig P256_Falcon-512
+go run main.go -ca-cert p256_dilithium2.minica.pebble.pem -ca-key p256_dilithium2.minica.pebble.key -ip-addresses 10.180.0.2 -ca-sig P256_Dilithium2 -pebble-sig P256_Dilithium2 

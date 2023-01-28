@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/liboqs_sig"
 	"crypto/rand"
 	"crypto/rsa"
@@ -23,6 +25,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	//"golang.org/x/text/cases"
+	//"golang.org/x/text/unicode/rangetable"
 )
 
 func main() {
@@ -52,52 +56,79 @@ func getIssuer(keyFile, certFile, signatureScheme string) (*issuer, error) {
 		return nil, fmt.Errorf("%s (but %s exists)", certErr, keyFile)
 	}
 
-	rsa, pqc, err := readPrivateKey(keyContents)
-
+	key, err := readPrivateKey(keyContents)
 	if err != nil {
 		return nil, fmt.Errorf("reading private key from %s: %s", keyFile, err)
 	}
-
 	cert, err := readCert(certContents)
 	if err != nil {
 		return nil, fmt.Errorf("reading CA certificate from %s: %s", certFile, err)
 	}
-	if rsa !=  nil {
-		equal, err := publicKeysEqual(rsa.Public(), cert.PublicKey)
+
+	switch k := key.(type) {
+	case *rsa.PrivateKey:
+		equal, err := publicKeysEqual(k.Public(), cert.PublicKey)
 		if err != nil {
 			return nil, fmt.Errorf("comparing public keys: %s", err)
 		} else if !equal {
 			return nil, fmt.Errorf("public key in CA certificate %s doesn't match private key in %s",
 				certFile, keyFile)
 		}
-		return &issuer{rsa, cert}, nil
-	} else if pqc != nil {
-		return &issuer{pqc, cert}, nil
+		return &issuer{k, cert}, nil
+	
+	case *ecdsa.PrivateKey:
+		equal, err := publicKeysEqual(k.Public(), cert.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("comparing public keys: %s", err)
+		} else if !equal {
+			return nil, fmt.Errorf("public key in CA certificate %s doesn't match private key in %s",
+				certFile, keyFile)
+		}
+		return &issuer{k, cert}, nil
+
+	case *liboqs_sig.PrivateKey:
+		equal, err := publicKeysEqual(k.Public(), cert.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("comparing public keys: %s", err)
+		} else if !equal {
+			return nil, fmt.Errorf("public key in CA certificate %s doesn't match private key in %s",
+				certFile, keyFile)
+		}
+		return &issuer{k, cert}, nil
+
 	}
 	return nil, nil
 	
 }
 
-func readPrivateKey(keyContents []byte) (crypto.Signer, interface{}, error) {
+func readPrivateKey(keyContents []byte) (interface{}, error) {
 	block, _ := pem.Decode(keyContents)
-	if block == nil {
-		return nil, nil,  fmt.Errorf("no PEM found")
-	} else if block.Type == "RSA PRIVATE KEY" || block.Type == "ECDSA PRIVATE KEY" {
-		priv, err :=  x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Classic: Unmarshall problem 2")
-		}
-		return priv, nil, nil
-		
-	} else if block.Type == "PQC PRIVATE KEY" {
+	if block != nil {
 		priv, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			return nil, nil,  fmt.Errorf("PQC: Unmarshall problem 2")
+			return nil,  fmt.Errorf("Unmarshall problem")
 		}
-		return nil, priv, nil
+		return priv, nil
+
+
+	// if block == nil {
+	// 	return nil,  fmt.Errorf("no PEM found")
+	// } else if block.Type == "RSA PRIVATE KEY" {
+	// 	priv, err :=  x509.ParsePKCS1PrivateKey(block.Bytes)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("Classic: Unmarshall problem 2")
+	// 	}
+	// 	return priv, nil
+		
+	// } else if block.Type == "PQC PRIVATE KEY" {
+	// 	priv, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	// 	if err != nil {
+	// 		return nil,  fmt.Errorf("PQC: Unmarshall problem 2")
+	// 	}
+	// 	return priv, nil
 	
 	} else {
-		return nil, nil, fmt.Errorf("incorrect PEM type %s", block.Type)
+		return nil, fmt.Errorf("incorrect PEM type %s", block.Type)
 	}
 	
 }
@@ -113,38 +144,48 @@ func readCert(certContents []byte) (*x509.Certificate, error) {
 }
 
 func makeIssuer(keyFile, certFile, signatureScheme string) error {
-	rsa, pqc, err := makeKey(keyFile, signatureScheme)
-	if err != nil {
-		return err
-	}
-	if signatureScheme == "RSA" {
-		_, err = makeRootCert(rsa, certFile)
+	key, err := makeKey(keyFile, signatureScheme)
+	switch k := key.(type) {
+	case *rsa.PrivateKey:
+		_, err = makeRootCert(k, certFile)
 		if err != nil {
 			return err
 		}
-	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-shake256-128s-simple"{
-		_, err = makePQCRootCert(pqc, certFile)
+	case *ecdsa.PrivateKey:
+		_, err = makeRootCert(k, certFile)
 		if err != nil {
 			return err
 		}
+	case *liboqs_sig.PrivateKey:
+		if IsValid(signatureScheme) {
+			_, err = makePQCRootCert(k, certFile)
+			if err != nil {
+				return err
+			}
+		}
 	}
+
 	return nil
 }
 
-func makeKey(filename, signatureScheme string) (*rsa.PrivateKey, *liboqs_sig.PrivateKey, error) {
+func makeKey(filename, signatureScheme string) (interface{}, error) {
 	
+	var der []byte
+	var file *os.File
+
+
 	if signatureScheme == "SHA256-RSA"{
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		der := x509.MarshalPKCS1PrivateKey(key)
+		der = x509.MarshalPKCS1PrivateKey(key)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		file, err = os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		defer file.Close()
 		err = pem.Encode(file, &pem.Block{
@@ -152,33 +193,59 @@ func makeKey(filename, signatureScheme string) (*rsa.PrivateKey, *liboqs_sig.Pri
 			Bytes: der,
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil,  err
 		}
-		return key, nil, nil
+		return key, nil
 	
-	} else if signatureScheme == "Dilithium2" || signatureScheme == "Falcon-512" || signatureScheme == "sphincs+-shake256-128s-simple" {
+	} else if signatureScheme == "ECDSA-P256" {
+		curve := elliptic.P256()
+
+		key, err := ecdsa.GenerateKey(curve, rand.Reader)
+		if err != nil {
+			log.Fatalf("Failed to generate private key: %v", err)
+		}
+		der, err = x509.MarshalPKCS8PrivateKey(key)
+		if err != nil {
+			return nil, err
+		}
+
+		file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		err = pem.Encode(file, &pem.Block{
+			Type:  "ECDSA PRIVATE KEY",
+			Bytes: der,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return key, nil
+
+	
+	} else if IsValid(signatureScheme) {
 		ID := liboqs_sig.NameToSigID(signatureScheme)
 		_, key,  err := liboqs_sig.GenerateKey(ID)
-		byteKey, err := x509.MarshalPKCS8PrivateKey(key)
+		der, err := x509.MarshalPKCS8PrivateKey(key)
 		pemKey := &pem.Block{
 			Type: "PQC PRIVATE KEY",
-			Bytes: byteKey,
+			Bytes: der,
 		}
 		
 		file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		defer file.Close()
 		err = pem.Encode(file, pemKey)
  		if err != nil {
- 			return nil, nil, err
+ 			return nil, err
  		}
-		// key.Sign()
-		return nil, key, nil
+		return key, nil
 
 	}
-	return nil, nil, nil
+	return nil, nil
 }
 
 func makeRootCert(key crypto.Signer, filename string) (*x509.Certificate, error) {
@@ -328,7 +395,7 @@ func sign(iss *issuer, domains []string, ipAddresses []string, pebbleSig string)
 		return nil, err
 	}
 	// 
-	rsa, pqc, err := makeKey(fmt.Sprintf("%s/%s.%s.key.pem", cnFolder, strings.ToLower(iss.cert.SignatureAlgorithm.String()), strings.ToLower(pebbleSig)), pebbleSig)
+	keyInterface, err := makeKey(fmt.Sprintf("%s/%s.%s.key.pem", cnFolder, strings.ToLower(iss.cert.SignatureAlgorithm.String()), strings.ToLower(pebbleSig)), pebbleSig)
 	if err != nil {
 		return nil, err
 	}
@@ -360,13 +427,19 @@ func sign(iss *issuer, domains []string, ipAddresses []string, pebbleSig string)
 		IsCA:                  false,
 	}
 	var der []byte
-	if rsa == nil {
-		der, err = x509.CreateCertificate(rand.Reader, template, iss.cert, pqc.Public(), iss.key)
+	switch key := keyInterface.(type) {
+	case *rsa.PrivateKey:
+		der, err = x509.CreateCertificate(rand.Reader, template, iss.cert, key.Public(), iss.key)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		der, err = x509.CreateCertificate(rand.Reader, template, iss.cert, rsa.Public(), iss.key)
+	case *ecdsa.PrivateKey:
+		der, err = x509.CreateCertificate(rand.Reader, template, iss.cert, key.Public(), iss.key)
+		if err != nil {
+			return nil, err
+		}
+	case *liboqs_sig.PrivateKey:
+		der, err = x509.CreateCertificate(rand.Reader, template, iss.cert, key.Public(), iss.key)
 		if err != nil {
 			return nil, err
 		}
@@ -391,6 +464,16 @@ func split(s string) (results []string) {
 		return strings.Split(s, ",")
 	}
 	return nil
+}
+
+func IsValid(sigScheme string) bool {
+	listPQC := []string{"Dilithium2", "Falcon-512", "sphincs+-shake256-128s-simple", "P256_Dilithium2", "P256_Falcon-512"}
+	for _, value := range listPQC {
+		if value == sigScheme {
+			return true
+		}
+	}
+	return false
 }
 
 func main2() error {
