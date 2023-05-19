@@ -467,7 +467,7 @@ func split(s string) (results []string) {
 }
 
 func IsValid(sigScheme string) bool {
-	listPQC := []string{"Dilithium2", "Falcon-512", "sphincs+-shake256-128s-simple", "P256_Dilithium2", "P256_Falcon-512"}
+	listPQC := []string{"Dilithium2", "Dilithium3", "Dilithium5", "Falcon-512", "Falcon-1024", "sphincs+-shake256-128s-simple", "P256_Dilithium2", "P256_Falcon-512"}
 	for _, value := range listPQC {
 		if value == sigScheme {
 			return true
